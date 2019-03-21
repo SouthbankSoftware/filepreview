@@ -1,213 +1,260 @@
-/*
-
-  filepreview : A file preview generator for node.js
-
+/* 
+  filepreview : A file preview generator for node.js 
 */
-
-var child_process = require('child_process');
-var crypto = require('crypto');
-var path = require('path');
-var fs = require('fs');
-var mimedb = require('./db.json');
+const child_process = require('child_process');
+const path = require('path');
+const fs = require('fs');
+const mimedb = require('./db.json');
 
 module.exports = {
-  generate: function(input, output, options, callback) {
-    // Normalize arguments
+  generate: (input, output, options = {}) =>
+    new Promise((resolve, reject) => {
+      if (!fs.existsSync(input)) reject({error: 'File doesnot exists.'});
 
-    if (typeof options === 'function') {
-      callback = options;
-      options = {};
-    } else {
-      options = options || {};
-    }
+      // Check for supported output format
+      let extOutput = path.extname(output).toLowerCase().replace('.', '');
+      let extInput = path.extname(input).toLowerCase().replace('.', '');
+      let inputFilename = path.basename(input, '.' + extInput);
 
-    // Check for supported output format
-    var extOutput = path.extname(output).toLowerCase().replace('.','');
-    var extInput = path.extname(input).toLowerCase().replace('.','');
+      if (extOutput != 'gif' && extOutput != 'jpg' && extOutput != 'png') {
+        reject({error: 'Only png, gif, jpg extension are support for export.'});
+      }
 
-    if (
-      extOutput != 'gif' &&
-      extOutput != 'jpg' &&
-      extOutput != 'png'
-    ) {
-      return callback(true);
-    }
+      let fileType = 'other';
 
-    var fileType = 'other';
-
-    root:
-    for ( var index in mimedb ) {
-      if ( 'extensions' in mimedb[index] ) {
-        for ( var indexExt in mimedb[index].extensions ) {
-          if ( mimedb[index].extensions[indexExt] == extInput ) {
-            if ( index.split('/')[0] == 'image' ) {
-              fileType = 'image';
-            } else if ( index.split('/')[0] == 'video' ) {
-              fileType = 'video';
-            } else {
-              fileType = 'other';
+      root: for (let index in mimedb) {
+        if ('extensions' in mimedb[index]) {
+          for (let indexExt in mimedb[index].extensions) {
+            if (mimedb[index].extensions[indexExt] == extInput) {
+              if (index.split('/')[0] == 'image') {
+                fileType = 'image';
+              } else if (index.split('/')[0] == 'video') {
+                fileType = 'video';
+              } else {
+                fileType = 'other';
+              }
+              break root;
             }
-
-            break root;
           }
         }
       }
-    }
 
-    if ( extInput == 'pdf' ) {
-      fileType = 'image';
-    }
+      if (extInput == 'pdf') {
+        fileType = 'image';
+      }
 
-    fs.lstat(input, function(error, stats) {
-      if (error) return callback(error);
-      if (!stats.isFile()) {
-        return callback(true);
-      } else {
-        if ( fileType == 'video' ) {
-          var ffmpegArgs = ['-y', '-i', input, '-vf', 'thumbnail', '-frames:v', '1', output];
-          if (options.width > 0 && options.height > 0) {
-            ffmpegArgs.splice(4, 1, 'thumbnail,scale=' + options.width + ':' + options.height);
-          }
-          child_process.execFile('ffmpeg', ffmpegArgs, function(error) {
-            if (error) return callback(error);
-            return callback();
-          });
-        }
-
-        if ( fileType == 'image' ) {
-          var convertArgs = [input + '[0]', output];
-          if (options.width > 0 && options.height > 0) {
-            convertArgs.splice(0, 0, '-resize', options.width + 'x' + options.height);
-          }
-          child_process.execFile('convert', convertArgs, function(error) {
-            if (error) return callback(error);
-            return callback();
-          });
-        }
-
-        if ( fileType == 'other' ) {
-          var hash = crypto.createHash('sha512');
-          hash.update(Math.random().toString());
-          hash = hash.digest('hex');
-
-          var tempPDF = '/tmp/'+ hash + '.pdf';
-
-          child_process.execFile('unoconv', ['-e', 'PageRange=1', '-o', tempPDF, input], function(error) {
-            if (error) return callback(error);
-            var convertOtherArgs = [tempPDF + '[0]', output];
+      fs.lstat(input, function(error, stats) {
+        if (error) reject(error);
+        if (!stats.isFile()) {
+          reject({error: 'Not a valid file.'});
+        } else {
+          if (fileType == 'video') {
+            let ffmpegArgs = ['-y', '-i', input, '-vf', 'thumbnail', '-frames:v', '1', output];
             if (options.width > 0 && options.height > 0) {
-              convertOtherArgs.splice(0, 0, '-resize', options.width + 'x' + options.height);
+              ffmpegArgs.splice(4, 1, 'thumbnail,scale=' + options.width + ':' + options.height);
             }
-            child_process.execFile('convert', convertOtherArgs, function(error) {
-              if (error) return callback(error);
-              fs.unlink(tempPDF, function(error) {
-                if (error) return callback(error);
-                return callback();
-              });
+            child_process.execFile('ffmpeg', ffmpegArgs, function(error) {
+              if (error) reject(error);
+              resolve({thumbnail: output});
             });
-          });
-        }
-      }
-    });
-  },
-  generateSync: function(input, output, options) {
+          }
 
-    options = options || {};
-    
-    // Check for supported output format
-    var extOutput = path.extname(output).toLowerCase().replace('.','');
-    var extInput = path.extname(input).toLowerCase().replace('.','');
-
-    if (
-      extOutput != 'gif' &&
-      extOutput != 'jpg' &&
-      extOutput != 'png'
-    ) {
-      return false;
-    }
-
-    var fileType = 'other';
-
-    root:
-    for ( var index in mimedb ) {
-      if ( 'extensions' in mimedb[index] ) {
-        for ( var indexExt in mimedb[index].extensions ) {
-          if ( mimedb[index].extensions[indexExt] == extInput ) {
-            if ( index.split('/')[0] == 'image' ) {
-              fileType = 'image';
-            } else if ( index.split('/')[0] == 'video' ) {
-              fileType = 'video';
-            } else {
-              fileType = 'other';
+          if (fileType == 'image') {
+            let convertArgs = [input + '[0]', output];
+            if (options.width > 0 && options.height > 0) {
+              if (options.keepAspect) {
+                convertArgs.splice(0, 0, '-resize', options.width + 'x' + options.height);
+              } else {
+                convertArgs.splice(0, 0, '-resize', options.width + 'x' + options.height + '!');
+              }
+            } else if (options.height > 0) {
+              convertArgs.splice(0, 0, '-resize', 'x' + options.height);
+            } else if (options.width > 0) {
+              convertArgs.splice(0, 0, '-resize', options.width);
             }
+            if (options.quality) {
+              convertArgs.splice(0, 0, '-quality', options.quality);
+            }
+            if (options.background) {
+              convertArgs.splice(0, 0, '-background', options.background);
+              convertArgs.splice(0, 0, '-flatten');
+            }
+            child_process.execFile('convert', convertArgs, function(error) {
+              if (error) reject(error);
+              resolve({thumbnail: output});
+            });
+          }
 
-            break root;
+          if (fileType == 'other') {
+            let tempPDF = path.join(options.pdfFolder, inputFilename + '.pdf');
+
+            child_process.execFile(
+              'unoconv',
+              ['-e', 'PageRange=1', '-o', tempPDF, input],
+              function(error) {
+                if (error) reject(error);
+                let convertOtherArgs = [tempPDF + '[0]', output];
+                if (options.width > 0 && options.height > 0) {
+                  if (options.keepAspect) {
+                    convertOtherArgs.splice(0, 0, '-resize', options.width + 'x' + options.height);
+                  } else {
+                    convertOtherArgs.splice(
+                      0,
+                      0,
+                      '-resize',
+                      options.width + 'x' + options.height + '!',
+                    );
+                  }
+                } else if (options.height > 0) {
+                  convertOtherArgs.splice(0, 0, '-resize', 'x' + options.height);
+                } else if (options.width > 0) {
+                  convertOtherArgs.splice(0, 0, '-resize', options.width);
+                }
+                if (options.quality) {
+                  convertOtherArgs.splice(0, 0, '-quality', options.quality);
+                }
+                if (options.background) {
+                  convertOtherArgs.splice(0, 0, '-background', options.background);
+                  convertOtherArgs.splice(0, 0, '-flatten');
+                }
+                child_process.execFile('convert', convertOtherArgs, function(error) {
+                  if (error) reject(error);
+                  if (!options.keepPdf || options.keepPdf == undefined) {
+                    fs.unlink(tempPDF, function(error) {
+                      if (error) reject(error);
+                      resolve({thumbnail: output});
+                    });
+                  } else {
+                    resolve({thumbnail: output, pdf: tempPDF});
+                  }
+                });
+              },
+            );
+          }
+        }
+      });
+    }),
+  generateSync: (input, output, options = {}) =>
+    new Promise((resolve, reject) => {
+      if (!fs.existsSync(input)) reject({error: 'File doesnot exists.'});
+      // Check for supported output format
+      let extOutput = path.extname(output).toLowerCase().replace('.', '');
+      let extInput = path.extname(input).toLowerCase().replace('.', '');
+      let inputFilename = path.basename(input, '.' + extInput);
+
+      if (extOutput != 'gif' && extOutput != 'jpg' && extOutput != 'png') {
+        reject({error: 'Only png, gif, jpg extension are support for export.'});
+      }
+
+      let fileType = 'other';
+
+      root: for (let index in mimedb) {
+        if ('extensions' in mimedb[index]) {
+          for (let indexExt in mimedb[index].extensions) {
+            if (mimedb[index].extensions[indexExt] == extInput) {
+              if (index.split('/')[0] == 'image') {
+                fileType = 'image';
+              } else if (index.split('/')[0] == 'video') {
+                fileType = 'video';
+              } else {
+                fileType = 'other';
+              }
+              break root;
+            }
           }
         }
       }
-    }
 
-    if ( extInput == 'pdf' ) {
-      fileType = 'image';
-    }
+      if (extInput == 'pdf') {
+        fileType = 'image';
+      }
 
-    try {
+      try {
         stats = fs.lstatSync(input);
 
         if (!stats.isFile()) {
-          return false;
+          reject(false);
         }
-    } catch (e) {
-        return false;
-    }
-
-    if ( fileType == 'video' ) {
-      try {
-        var ffmpegArgs = ['-y', '-i', input, '-vf', 'thumbnail', '-frames:v', '1', output];
-        if (options.width > 0 && options.height > 0) {
-          ffmpegArgs.splice(4, 1, 'thumbnail,scale=' + options.width + ':' + options.height)
-        }
-        child_process.execFileSync('ffmpeg', ffmpegArgs);
-        return true;
       } catch (e) {
-        return false;
+        reject(false);
       }
-    }
 
-    if ( fileType == 'image' ) {
-      try {
-        var convertArgs = [input + '[0]', output];
-        if (options.width > 0 && options.height > 0) {
-          convertArgs.splice(0, 0, '-resize', options.width + 'x' + options.height);
+      if (fileType == 'video') {
+        try {
+          let ffmpegArgs = ['-y', '-i', input, '-vf', 'thumbnail', '-frames:v', '1', output];
+          if (options.width > 0 && options.height > 0) {
+            ffmpegArgs.splice(4, 1, 'thumbnail,scale=' + options.width + ':' + options.height);
+          }
+          child_process.execFileSync('ffmpeg', ffmpegArgs);
+          resolve({thumbnail: output});
+        } catch (e) {
+          reject(e);
         }
-        child_process.execFileSync('convert', convertArgs);
-        return true;
-      } catch (e) {
-        return false;
       }
-    }
 
-    if ( fileType == 'other' ) {
-      try {
-        var hash = crypto.createHash('sha512');
-        hash.update(Math.random().toString());
-        hash = hash.digest('hex');
-
-        var tempPDF = '/tmp/'+ hash + '.pdf';
-
-        child_process.execFileSync('unoconv', ['-e', 'PageRange=1', '-o', tempPDF, input]);
-
-        var convertOtherArgs = [tempPDF + '[0]', output];
-        if (options.width > 0 && options.height > 0) {
-          convertOtherArgs.splice(0, 0, '-resize', options.width + 'x' + options.height);
+      if (fileType == 'image') {
+        try {
+          let convertArgs = [input + '[0]', output];
+          if (options.width > 0 && options.height > 0) {
+            if (options.keepAspect) {
+              convertArgs.splice(0, 0, '-resize', options.width + 'x' + options.height);
+            } else {
+              convertArgs.splice(0, 0, '-resize', options.width + 'x' + options.height + '!');
+            }
+          } else if (options.height > 0) {
+            convertArgs.splice(0, 0, '-resize', 'x' + options.height);
+          } else if (options.width > 0) {
+            convertArgs.splice(0, 0, '-resize', options.width);
+          }
+          if (options.quality) {
+            convertArgs.splice(0, 0, '-quality', options.quality);
+          }
+          child_process.execFileSync('convert', convertArgs);
+          resolve({thumbnail: output});
+        } catch (e) {
+          reject(e);
         }
-        child_process.execFileSync('convert', convertOtherArgs);
-        fs.unlinkSync(tempPDF);
-
-        return true;
-      } catch (e) {
-        return false;
       }
-    }
-  }
+
+      if (fileType == 'other') {
+        try {
+          let tempPDF = path.join(options.pdfFolder, inputFilename + '.pdf');
+
+          child_process.execFileSync('unoconv', ['-e', 'PageRange=1', '-o', tempPDF, input]);
+
+          let convertOtherArgs = [tempPDF + '[0]', output];
+          if (options.width > 0 && options.height > 0) {
+            if (options.keepAspect) {
+              convertOtherArgs.splice(0, 0, '-resize', options.width + 'x' + options.height);
+            } else {
+              convertOtherArgs.splice(0, 0, '-resize', options.width + 'x' + options.height + '!');
+            }
+          } else if (options.height > 0) {
+            convertOtherArgs.splice(0, 0, '-resize', 'x' + options.height);
+          } else if (options.width > 0) {
+            convertOtherArgs.splice(0, 0, '-resize', options.width);
+          }
+          if (options.quality) {
+            convertOtherArgs.splice(0, 0, '-quality', options.quality);
+          }
+          if (options.background) {
+            convertOtherArgs.splice(0, 0, '-background', options.background);
+            convertOtherArgs.splice(0, 0, '-flatten');
+          }
+          child_process.execFileSync('convert', convertOtherArgs);
+
+          if (!options.keepPdf || options.keepPdf == undefined) {
+            try {
+              fs.unlinkSync(tempPDF);
+              resolve({thumbnail: output});
+            } catch (e) {
+              reject(e);
+            }
+          }
+          resolve({thumbnail: output, pdf: tempPDF});
+        } catch (e) {
+          reject(e);
+        }
+      }
+    }),
 };
