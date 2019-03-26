@@ -79,7 +79,7 @@ module.exports = {
               convertArgs.splice(0, 0, '-background', options.background);
               convertArgs.splice(0, 0, '-flatten');
             }
-            child_process.execFile('convert', convertArgs, function(error) {
+            child_process.execFile('gm convert', convertArgs, function(error) {
               if (error) reject(error);
               resolve({thumbnail: output});
             });
@@ -117,7 +117,7 @@ module.exports = {
                   convertOtherArgs.splice(0, 0, '-background', options.background);
                   convertOtherArgs.splice(0, 0, '-flatten');
                 }
-                child_process.execFile('convert', convertOtherArgs, function(error) {
+                child_process.execFile('gm convert', convertOtherArgs, function(error) {
                   if (error) reject(error);
                   if (!options.keepPdf || options.keepPdf == undefined) {
                     fs.unlink(tempPDF, function(error) {
@@ -209,7 +209,7 @@ module.exports = {
           if (options.quality) {
             convertArgs.splice(0, 0, '-quality', options.quality);
           }
-          child_process.execFileSync('convert', convertArgs);
+          child_process.execFileSync('gm convert', convertArgs);
           resolve({thumbnail: output});
         } catch (e) {
           reject(e);
@@ -241,7 +241,7 @@ module.exports = {
             convertOtherArgs.splice(0, 0, '-background', options.background);
             convertOtherArgs.splice(0, 0, '-flatten');
           }
-          child_process.execFileSync('convert', convertOtherArgs);
+          child_process.execFileSync('gm convert', convertOtherArgs);
 
           if (!options.keepPdf || options.keepPdf == undefined) {
             try {
