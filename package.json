@@ -8,7 +8,7 @@
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/maxlabelle/filepreview.git"
+    "url": "git+ssh://github.com/maxlabelle/filepreview.git"
   },
   "keywords": [
     "video",
